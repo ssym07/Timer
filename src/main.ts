@@ -34,23 +34,74 @@ function validSound(value: unknown): SoundChoice {
 }
 let soundRevision = 0;
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const cityGroups = [
+  { region: '東アジア', cities: [['東京', 'Asia/Tokyo'], ['ソウル', 'Asia/Seoul'], ['北京', 'Asia/Shanghai'], ['香港', 'Asia/Hong_Kong'], ['台北', 'Asia/Taipei']] },
+  { region: 'アジア・中東', cities: [['シンガポール', 'Asia/Singapore'], ['バンコク', 'Asia/Bangkok'], ['ジャカルタ', 'Asia/Jakarta'], ['マニラ', 'Asia/Manila'], ['ニューデリー', 'Asia/Kolkata'], ['カトマンズ', 'Asia/Kathmandu'], ['ドバイ', 'Asia/Dubai'], ['リヤド', 'Asia/Riyadh']] },
+  { region: 'ヨーロッパ', cities: [['ロンドン', 'Europe/London'], ['パリ', 'Europe/Paris'], ['ベルリン', 'Europe/Berlin'], ['ローマ', 'Europe/Rome'], ['マドリード', 'Europe/Madrid'], ['アテネ', 'Europe/Athens'], ['イスタンブール', 'Europe/Istanbul'], ['モスクワ', 'Europe/Moscow']] },
+  { region: 'アフリカ', cities: [['カイロ', 'Africa/Cairo'], ['ヨハネスブルク', 'Africa/Johannesburg'], ['ナイロビ', 'Africa/Nairobi'], ['ラゴス', 'Africa/Lagos'], ['カサブランカ', 'Africa/Casablanca']] },
+  { region: '南北アメリカ', cities: [['ニューヨーク', 'America/New_York'], ['シカゴ', 'America/Chicago'], ['デンバー', 'America/Denver'], ['ロサンゼルス', 'America/Los_Angeles'], ['バンクーバー', 'America/Vancouver'], ['トロント', 'America/Toronto'], ['メキシコシティ', 'America/Mexico_City'], ['サンパウロ', 'America/Sao_Paulo'], ['ブエノスアイレス', 'America/Argentina/Buenos_Aires'], ['リマ', 'America/Lima']] },
+  { region: 'オセアニア・太平洋', cities: [['シドニー', 'Australia/Sydney'], ['アデレード', 'Australia/Adelaide'], ['パース', 'Australia/Perth'], ['オークランド', 'Pacific/Auckland'], ['ホノルル', 'Pacific/Honolulu'], ['スバ', 'Pacific/Fiji']] },
+];
+const cities = cityGroups.flatMap(group => group.cities);
+const validCity = (value: unknown): value is string => cities.some(city => city[1] === value);
+let primaryCity = 'Asia/Tokyo';
+let worldCities = ['Asia/Tokyo', 'Asia/Singapore', 'Europe/London', 'America/New_York', 'Africa/Johannesburg', 'Australia/Sydney'];
+try {
+  const saved = JSON.parse(localStorage.getItem('tempo-world-clock') || 'null');
+  if (validCity(saved?.primaryCity)) primaryCity = saved.primaryCity;
+  if (Array.isArray(saved?.worldCities) && saved.worldCities.length === 6 && saved.worldCities.every(validCity)) worldCities = saved.worldCities;
+} catch { /* Ignore unavailable storage or invalid saved cities. */ }
+function cityOptions(selected: string) {
+  return cityGroups.map(group => `<optgroup label="${group.region}">${group.cities.map(([name, timeZone]) => `<option value="${timeZone}"${timeZone === selected ? ' selected' : ''}>${name}</option>`).join('')}</optgroup>`).join('');
+}
+const clockFormats = new Map<string, { time: Intl.DateTimeFormat; date: Intl.DateTimeFormat; offset: Intl.DateTimeFormat }>();
+function cityTime(timeZone: string, now: Date) {
+  let formats = clockFormats.get(timeZone);
+  if (!formats) {
+    formats = {
+      time: new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }),
+      date: new Intl.DateTimeFormat('ja-JP', { timeZone, month: 'long', day: 'numeric', weekday: 'short' }),
+      offset: new Intl.DateTimeFormat('en', { timeZone, timeZoneName: 'longOffset' }),
+    };
+    clockFormats.set(timeZone, formats);
+  }
+  return { time: formats.time.format(now), date: formats.date.format(now), offset: formats.offset.formatToParts(now).find(part => part.type === 'timeZoneName')!.value.replace('GMT', 'UTC') };
+}
+function saveCities() {
+  try { localStorage.setItem('tempo-world-clock', JSON.stringify({ primaryCity, worldCities })); } catch { /* Storage is optional. */ }
+}
+
 $('app').innerHTML = `
-<header><a class="brand" href="./" aria-label="TEMPO ホーム"><span class="brand-icon">◷</span> TEMPO<span class="brand-dot">.</span></a><div class="header-right"><span class="local"><i></i> LOCAL TIME</span><button id="fullscreen" class="icon-button" aria-label="全画面表示">⛶</button></div></header>
-<main><nav aria-label="表示切り替え"><button data-mode="clock" class="selected" aria-pressed="true">◷ <span>時計</span></button><button data-mode="timer" aria-pressed="false">◴ <span>タイマー</span></button><button data-mode="stopwatch" aria-pressed="false">⏱ <span>ストップウォッチ</span></button><button data-mode="settings" aria-pressed="false">⚙ <span>設定</span></button></nav>
-<section id="stage" class="stage" aria-label="時間表示"><p id="eyebrow" class="eyebrow">MAKE TIME FOR WHAT MATTERS</p><p id="date" class="date"></p><div id="digits" class="digits" role="timer" aria-label="現在時刻"></div><p id="caption" class="caption"></p><div id="progress" class="progress" hidden><div></div></div></section>
+<header><a class="brand" href="./" aria-label="TEMPO ホーム"><span class="brand-icon">◷</span> TEMPO<span class="brand-dot">.</span></a><div class="header-right"><span class="local" id="time-label"><i></i> WORLD TIME</span><button id="fullscreen" class="icon-button" aria-label="全画面表示">⛶</button></div></header>
+<div id="world-map" class="world-map" aria-hidden="true"></div><main><nav aria-label="表示切り替え"><button data-mode="clock" class="selected" aria-pressed="true">◷ <span>時計</span></button><button data-mode="timer" aria-pressed="false">◴ <span>タイマー</span></button><button data-mode="stopwatch" aria-pressed="false">⏱ <span>ストップウォッチ</span></button><button data-mode="settings" aria-pressed="false">⚙ <span>設定</span></button></nav>
+<section id="stage" class="stage" aria-label="時間表示"><p id="eyebrow" class="eyebrow">MAKE TIME FOR WHAT MATTERS</p><div id="primary-city-control" class="primary-city-control"><label for="primary-city">メインの都市</label><select id="primary-city">${cityOptions(primaryCity)}</select></div><p id="date" class="date"></p><div id="digits" class="digits" role="timer" aria-label="現在時刻"></div><p id="caption" class="caption"></p><div id="progress" class="progress" hidden><div></div></div></section>
+<section id="world-clocks" class="world-clocks" aria-labelledby="world-title"><div class="world-heading"><h2 id="world-title">世界時計 <span>WORLD CLOCK</span></h2><p>都市を選んで、世界の今を。</p></div><div class="city-grid">${worldCities.map((timeZone, i) => `<article class="city-card"><label for="city-${i}">都市 ${i + 1}</label><select id="city-${i}" data-city="${i}">${cityOptions(timeZone)}</select><p id="city-time-${i}" class="city-time"></p><div class="city-detail"><span id="city-date-${i}"></span><span id="city-offset-${i}"></span></div></article>`).join('')}</div></section>
 <section id="timer-controls" class="controls" hidden><div class="presets"><button data-minutes="5">5分</button><button data-minutes="15">15分</button><button data-minutes="25" class="active">25分</button><button data-minutes="60">60分</button></div><form id="custom"><label>分 <input id="minutes" type="number" min="0" max="999" value="25" required></label><label>秒 <input id="seconds" type="number" min="0" max="59" value="0" required></label><button type="submit">設定</button></form><div class="actions"><button id="timer-reset">リセット</button><button id="timer-toggle" class="primary">スタート</button></div></section>
-<section id="stopwatch-controls" class="controls" hidden><div class="actions"><button id="stopwatch-reset">リセット</button><button id="stopwatch-toggle" class="primary">スタート</button><button id="lap" disabled>ラップ</button></div><ol id="laps" aria-label="ラップ記録"></ol></section>
+<section id="stopwatch-controls" class="controls" hidden><div class="actions"><button id="stopwatch-reset">リセット</button><button id="stopwatch-toggle" class="primary">スタート</button><button id="lap" disabled>ラップ</button></div><ol id="laps" aria-label="ラップ記録"></ol><div id="lap-pages" class="lap-pages" hidden><button id="laps-newer" aria-label="新しいラップへ">← 新しい</button><span id="lap-page" role="status"></span><button id="laps-older" aria-label="古いラップへ">古い →</button></div></section>
 <div id="message" role="status" class="message"></div>
 <div id="alarm-banner" class="alarm-banner" role="alert" hidden><strong>タイマーが終了しました</strong><button id="alarm-dismiss">確認・音を止める</button></div>
 <section id="settings" hidden class="settings" aria-labelledby="settings-title">
 <div class="settings-heading"><h2 id="settings-title">タイマー終了のお知らせ</h2><p>画面への通知と、終了音をそれぞれ設定できます。</p></div>
-<div class="setting-row"><div class="setting-copy"><h3>画面に通知する <span id="notification-badge" class="status-badge" role="status"></span></h3><p id="notification-status"></p></div><button id="notifications" aria-describedby="notification-status">通知を許可する</button><button id="notification-test" hidden>通知を試す</button></div>
-<div class="setting-row"><div class="setting-copy"><h3>終了音を鳴らす</h3><p>選択した音を再生します。音量は端末側でも調整できます。</p></div><div class="sound-control"><button id="sound-test">音を試す</button><span id="sound-status">オン</span><button id="sound" class="switch" role="switch" aria-checked="true" aria-label="終了音を鳴らす"><span></span></button></div></div>
-<div class="setting-row sound-picker"><div class="setting-copy"><h3><label for="sound-choice">終了音を選ぶ</label></h3><select id="sound-choice" aria-describedby="sound-caption">${builtInSounds.map(item => `<option value="${item.id}">${item.name}</option>`).join('')}<option id="custom-option" value="custom" disabled>インポートしたMP3（未登録）</option></select><p id="sound-caption"></p><p id="import-status" role="status">MP3はこのブラウザ内に保存されます。サーバーには送信しません。</p></div><div class="import-actions"><button id="import-sound">MP3をインポート</button><button id="remove-sound" hidden>取り込んだ音を削除</button><input id="sound-file" type="file" accept=".mp3,audio/mpeg" hidden></div></div>
+<div class="settings-tabs" aria-label="設定項目"><button data-setting="notification" aria-pressed="true">通知</button><button data-setting="sound" aria-pressed="false">終了音</button><button data-setting="source" aria-pressed="false">音源・MP3</button></div>
+<div id="setting-notification" class="setting-row"><div class="setting-copy"><h3>画面に通知する <span id="notification-badge" class="status-badge" role="status"></span></h3><p id="notification-status"></p></div><button id="notifications" aria-describedby="notification-status">通知を許可する</button><button id="notification-test" hidden>通知を試す</button></div>
+<div id="setting-sound" class="setting-row" hidden><div class="setting-copy"><h3>終了音を鳴らす</h3><p>選択した音を再生します。音量は端末側でも調整できます。</p></div><div class="sound-control"><button id="sound-test">音を試す</button><span id="sound-status">オン</span><button id="sound" class="switch" role="switch" aria-checked="true" aria-label="終了音を鳴らす"><span></span></button></div></div>
+<div id="setting-source" class="setting-row sound-picker" hidden><div class="setting-copy"><h3><label for="sound-choice">終了音を選ぶ</label></h3><select id="sound-choice" aria-describedby="sound-caption">${builtInSounds.map(item => `<option value="${item.id}">${item.name}</option>`).join('')}<option id="custom-option" value="custom" disabled>インポートしたMP3（未登録）</option></select><p id="sound-caption"></p><p id="import-status" role="status">MP3はこのブラウザ内に保存されます。サーバーには送信しません。</p></div><div class="import-actions"><button id="import-sound">MP3をインポート</button><button id="remove-sound" hidden>取り込んだ音を削除</button><input id="sound-file" type="file" accept=".mp3,audio/mpeg" hidden></div></div>
 <p class="notification-note">このタブは開いたままにしてください。別のタブを見ている間も通知できますが、ブラウザの休止や端末のスリープで遅れる場合があります。</p>
 </section>
 </main><footer><span>LESS DISTRACTION. MORE FOCUS.</span><span id="zone"></span></footer>`;
 $('zone').textContent = zone;
+document.querySelectorAll<HTMLButtonElement>('[data-setting]').forEach(button => button.onclick = () => {
+  const selected = button.dataset.setting;
+  for (const name of ['notification', 'sound', 'source']) $(`setting-${name}`).hidden = selected !== name;
+  document.querySelectorAll<HTMLButtonElement>('[data-setting]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+});
+$('primary-city').onchange = () => {
+  const value = $<HTMLSelectElement>('primary-city').value;
+  if (validCity(value)) { primaryCity = value; saveCities(); render(); }
+};
+document.querySelectorAll<HTMLSelectElement>('[data-city]').forEach(control => control.onchange = () => {
+  if (validCity(control.value)) { worldCities[Number(control.dataset.city)] = control.value; saveCities(); render(); }
+});
 const pad = (n: number) => String(n).padStart(2, '0');
 function format(ms: number, fraction = false) {
   const total = Math.floor(Math.max(0, ms) / 1000);
@@ -194,9 +245,17 @@ function render() {
   if (mode === 'settings') { document.title = 'TEMPO — 設定'; return; }
   let display: string;
   if (mode === 'clock') {
-    display = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    $('date').textContent = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(now);
-    $('caption').textContent = 'あなたの時間を、あなたのペースで。';
+    const current = cityTime(primaryCity, now);
+    display = current.time;
+    $('date').textContent = current.date;
+    $('caption').textContent = `${cities.find(city => city[1] === primaryCity)![0]} · ${current.offset}${primaryCity === 'Asia/Tokyo' ? ' / JST' : ''}`;
+    $('zone').textContent = primaryCity;
+    worldCities.forEach((timeZone, i) => {
+      const current = cityTime(timeZone, now);
+      $(`city-time-${i}`).textContent = current.time;
+      $(`city-date-${i}`).textContent = current.date;
+      $(`city-offset-${i}`).textContent = current.offset;
+    });
   } else if (mode === 'timer') {
     display = format(Math.ceil(remaining / 1000) * 1000);
     $('date').textContent = 'ひとつのことに、集中する時間。';
@@ -217,6 +276,12 @@ let tick: number;
 function schedule() { clearTimeout(tick); render(); tick = window.setTimeout(schedule, document.hidden ? 1000 : mode === 'stopwatch' && started !== null ? 33 : 1000 - Date.now() % 1000); }
 function select(next: Mode) {
   mode = next;
+  $('app').classList.toggle('clock-view', mode === 'clock');
+  $('world-map').hidden = mode !== 'clock';
+  $('world-clocks').hidden = mode !== 'clock';
+  $('primary-city-control').hidden = mode !== 'clock';
+  $('time-label').innerHTML = `<i></i> ${mode === 'clock' ? 'WORLD TIME' : 'LOCAL TIME'}`;
+  if (mode !== 'clock') $('zone').textContent = zone;
   $('stage').hidden = mode === 'settings';
   $('settings').hidden = mode !== 'settings';
   document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => { const active = button.dataset.mode === mode; button.classList.toggle('selected', active); button.setAttribute('aria-pressed', String(active)); });
@@ -245,8 +310,27 @@ $('timer-toggle').onclick = () => {
 };
 $('timer-reset').onclick = () => { stopAlarm(); $('alarm-banner').hidden = true; deadline = null; remaining = duration; persist(); message(''); render(); };
 $('stopwatch-toggle').onclick = () => { if (started === null) started = performance.now(); else { elapsed = currentElapsed(); started = null; } schedule(); };
-$('stopwatch-reset').onclick = () => { started = null; elapsed = 0; laps = []; $('laps').replaceChildren(); schedule(); };
-$('lap').onclick = () => { if (started === null) return; const total = currentElapsed(); const previous = laps.at(-1) ?? 0; laps.push(total); const row = document.createElement('li'); for (const value of [`LAP ${pad(laps.length)}`, `+ ${format(total - previous, true)}`, format(total, true)]) { const span = document.createElement('span'); span.textContent = value; row.append(span); } $('laps').prepend(row); };
+$('stopwatch-reset').onclick = () => { started = null; elapsed = 0; laps = []; lapPage = 0; renderLaps(); schedule(); };
+let lapPage = 0;
+const lapsPerPage = 3;
+function renderLaps() {
+  const pages = Math.max(1, Math.ceil(laps.length / lapsPerPage));
+  lapPage = Math.min(lapPage, pages - 1);
+  const end = laps.length - lapPage * lapsPerPage;
+  const begin = Math.max(0, end - lapsPerPage);
+  $('laps').innerHTML = laps.slice(begin, end).map((total, i) => {
+    const index = begin + i;
+    return `<li><span>LAP ${pad(index + 1)}</span><span>+ ${format(total - (laps[index - 1] ?? 0), true)}</span><span>${format(total, true)}</span></li>`;
+  }).reverse().join('');
+  $('lap-pages').hidden = laps.length === 0;
+  $('lap-page').textContent = `${lapPage + 1} / ${pages}`;
+  $<HTMLButtonElement>('laps-newer').disabled = lapPage === 0;
+  $<HTMLButtonElement>('laps-older').disabled = lapPage === pages - 1;
+}
+$('laps-newer').onclick = () => { lapPage = Math.max(0, lapPage - 1); renderLaps(); };
+$('laps-older').onclick = () => { lapPage++; renderLaps(); };
+$('lap').onclick = () => { if (started === null) return; laps.push(currentElapsed()); lapPage = 0; renderLaps(); };
+
 $('sound').onclick = () => { sound = !sound; if (!sound) stopAlarm(); $('sound').setAttribute('aria-checked', String(sound)); $('sound-status').textContent = sound ? 'オン' : 'オフ'; void saveSound(); if (sound && deadline !== null) { try { audio ??= new AudioContext(); void audio.resume().catch(() => {}); void loadAlarm(audio).catch(() => {}); } catch { message('この環境では終了音を利用できません。'); } } };
 function notificationStatus() {
   const supported = 'Notification' in window && window.isSecureContext;

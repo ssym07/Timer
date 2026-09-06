@@ -120,3 +120,59 @@ test('rendered sound dropdown includes five built-ins and a separate custom opti
   assert.deepEqual(options.slice(0, 5).map(option => option[2]), ['標準アラーム', '警告音', 'やさしいチャイム', '電子ビープ', 'ベル']);
   assert.match(options[5][1], /id="custom-option"/);
 });
+
+test('world clocks handle midnight, fractional offsets, and daylight saving', () => {
+  const a = app();
+  const clock = (zone, instant) => a.run(`cityTime('${zone}', new Date('${instant}'))`);
+  assert.equal(clock('Asia/Tokyo', '2026-01-01T15:00:00Z').time, '00:00:00');
+  assert.match(clock('Asia/Tokyo', '2026-01-01T15:00:00Z').date, /1月2日/);
+  assert.equal(clock('Asia/Kolkata', '2026-01-01T00:00:00Z').time, '05:30:00');
+  assert.equal(clock('Asia/Kathmandu', '2026-01-01T00:00:00Z').offset, 'UTC+05:45');
+  assert.equal(clock('America/New_York', '2026-03-08T06:59:59Z').time, '01:59:59');
+  assert.equal(clock('America/New_York', '2026-03-08T07:00:00Z').time, '03:00:00');
+  assert.match(clock('Europe/London', '2026-01-01T12:00:00Z').offset, /^UTC(?:\+00:00)?$/);
+  assert.equal(clock('Europe/London', '2026-07-01T12:00:00Z').offset, 'UTC+01:00');
+  assert.equal(clock('Australia/Sydney', '2026-01-01T12:00:00Z').offset, 'UTC+11:00');
+  assert.equal(clock('Australia/Sydney', '2026-07-01T12:00:00Z').offset, 'UTC+10:00');
+  for (const zone of a.run('cities.map(city => city[1])')) assert.match(clock(zone, '2026-09-06T00:00:00Z').time, /^\d{2}:\d{2}:\d{2}$/);
+});
+
+test('main city selection updates time and storage; world clocks only appear on clock tab', () => {
+  const a = app();
+  a.node('primary-city').value = 'America/New_York';
+  a.node('primary-city').onchange();
+  assert.equal(a.run('primaryCity'), 'America/New_York');
+  assert.equal(a.node('digits').textContent, a.run("cityTime('America/New_York', new Date()).time"));
+  assert.equal(a.run("JSON.parse(localStorage.getItem('tempo-world-clock')).primaryCity"), 'America/New_York');
+  assert.match(a.node('city-time-0').textContent, /^\d{2}:\d{2}:\d{2}$/);
+  a.run("select('timer')");
+  assert.equal(a.node('world-clocks').hidden, true);
+  assert.equal(a.node('world-map').hidden, true);
+  a.run("select('clock')");
+  assert.equal(a.node('world-clocks').hidden, false);
+  assert.equal(a.node('primary-city-control').hidden, false);
+});
+
+test('lap history keeps all records and pages without a scrolling list', () => {
+  const a = app();
+  a.node('stopwatch-toggle').onclick();
+  for (let i = 0; i < 8; i++) { a.advance(1000); a.node('lap').onclick(); }
+  assert.equal(a.run('laps.length'), 8);
+  assert.equal((a.node('laps').innerHTML.match(/<li>/g) || []).length, 3);
+  assert.match(a.node('laps').innerHTML, /LAP 08/);
+  assert.equal(a.node('lap-page').textContent, '1 / 3');
+  a.node('laps-older').onclick();
+  assert.match(a.node('laps').innerHTML, /LAP 05/);
+  assert.doesNotMatch(a.node('laps').innerHTML, /LAP 08/);
+  a.node('laps-older').onclick();
+  assert.match(a.node('laps').innerHTML, /LAP 01/);
+  assert.equal(a.node('laps-older').disabled, true);
+  a.node('laps-newer').onclick();
+  assert.equal(a.node('lap-page').textContent, '2 / 3');
+  a.advance(1000); a.node('lap').onclick();
+  assert.equal(a.node('lap-page').textContent, '1 / 3');
+  assert.match(a.node('laps').innerHTML, /LAP 09/);
+  a.node('stopwatch-reset').onclick();
+  assert.equal(a.node('laps').innerHTML, '');
+  assert.equal(a.node('lap-pages').hidden, true);
+});
