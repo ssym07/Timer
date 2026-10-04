@@ -139,6 +139,8 @@ test('world clocks handle midnight, fractional offsets, and daylight saving', ()
 
 test('main city selection updates time and storage; world clocks only appear on clock tab', () => {
   const a = app();
+  a.node('world-clock-toggle').checked = true;
+  a.node('world-clock-toggle').onchange();
   a.node('primary-city').value = 'America/New_York';
   a.node('primary-city').onchange();
   assert.equal(a.run('primaryCity'), 'America/New_York');
@@ -175,4 +177,28 @@ test('lap history keeps all records and pages without a scrolling list', () => {
   a.node('stopwatch-reset').onclick();
   assert.equal(a.node('laps').innerHTML, '');
   assert.equal(a.node('lap-pages').hidden, true);
+});
+
+ test('world clock checkbox switches local and world views and persists across tabs', () => {
+  const a = app();
+  assert.equal(a.node('world-clocks').hidden, true);
+  assert.equal(a.node('primary-city-control').hidden, true);
+  assert.equal(a.node('digits').textContent, a.run('cityTime(zone, new Date()).time'));
+  a.node('world-clock-toggle').checked = true;
+  a.node('world-clock-toggle').onchange();
+  assert.equal(a.node('world-clocks').hidden, false);
+  assert.equal(a.node('world-map').hidden, false);
+  assert.equal(a.run("JSON.parse(localStorage.getItem('tempo-world-clock')).showWorldClock"), true);
+  a.run("select('stopwatch')");
+  assert.equal(a.node('world-clock-control').hidden, true);
+  assert.equal(a.node('world-clocks').hidden, true);
+  a.run("select('clock')");
+  assert.equal(a.node('world-clock-toggle').checked, true);
+  assert.equal(a.node('world-clocks').hidden, false);
+  a.node('world-clock-toggle').checked = false;
+  a.node('world-clock-toggle').onchange();
+  assert.equal(a.node('world-clocks').hidden, true);
+  assert.equal(a.node('world-map').hidden, true);
+  assert.equal(a.node('digits').textContent, a.run('cityTime(zone, new Date()).time'));
+  assert.equal(a.run("JSON.parse(localStorage.getItem('tempo-world-clock')).showWorldClock"), false);
 });

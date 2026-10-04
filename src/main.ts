@@ -44,10 +44,12 @@ const cityGroups = [
 ];
 const cities = cityGroups.flatMap(group => group.cities);
 const validCity = (value: unknown): value is string => cities.some(city => city[1] === value);
+let showWorldClock = false;
 let primaryCity = 'Asia/Tokyo';
 let worldCities = ['Asia/Tokyo', 'Asia/Singapore', 'Europe/London', 'America/New_York', 'Africa/Johannesburg', 'Australia/Sydney'];
 try {
   const saved = JSON.parse(localStorage.getItem('tempo-world-clock') || 'null');
+  if (typeof saved?.showWorldClock === 'boolean') showWorldClock = saved.showWorldClock;
   if (validCity(saved?.primaryCity)) primaryCity = saved.primaryCity;
   if (Array.isArray(saved?.worldCities) && saved.worldCities.length === 6 && saved.worldCities.every(validCity)) worldCities = saved.worldCities;
 } catch { /* Ignore unavailable storage or invalid saved cities. */ }
@@ -68,13 +70,13 @@ function cityTime(timeZone: string, now: Date) {
   return { time: formats.time.format(now), date: formats.date.format(now), offset: formats.offset.formatToParts(now).find(part => part.type === 'timeZoneName')!.value.replace('GMT', 'UTC') };
 }
 function saveCities() {
-  try { localStorage.setItem('tempo-world-clock', JSON.stringify({ primaryCity, worldCities })); } catch { /* Storage is optional. */ }
+  try { localStorage.setItem('tempo-world-clock', JSON.stringify({ primaryCity, worldCities, showWorldClock })); } catch { /* Storage is optional. */ }
 }
 
 $('app').innerHTML = `
 <header><a class="brand" href="./" aria-label="TEMPO ホーム"><span class="brand-icon">◷</span> TEMPO<span class="brand-dot">.</span></a><div class="header-right"><span class="local" id="time-label"><i></i> WORLD TIME</span><button id="fullscreen" class="icon-button" aria-label="全画面表示">⛶</button></div></header>
 <div id="world-map" class="world-map" aria-hidden="true"></div><main><nav aria-label="表示切り替え"><button data-mode="clock" class="selected" aria-pressed="true">◷ <span>時計</span></button><button data-mode="timer" aria-pressed="false">◴ <span>タイマー</span></button><button data-mode="stopwatch" aria-pressed="false">⏱ <span>ストップウォッチ</span></button><button data-mode="settings" aria-pressed="false">⚙ <span>設定</span></button></nav>
-<section id="stage" class="stage" aria-label="時間表示"><p id="eyebrow" class="eyebrow">MAKE TIME FOR WHAT MATTERS</p><div id="primary-city-control" class="primary-city-control"><label for="primary-city">メインの都市</label><select id="primary-city">${cityOptions(primaryCity)}</select></div><p id="date" class="date"></p><div id="digits" class="digits" role="timer" aria-label="現在時刻"></div><p id="caption" class="caption"></p><div id="progress" class="progress" hidden><div></div></div></section>
+<section id="stage" class="stage" aria-label="時間表示"><p id="eyebrow" class="eyebrow">MAKE TIME FOR WHAT MATTERS</p><label id="world-clock-control" class="world-clock-control"><input id="world-clock-toggle" type="checkbox" aria-controls="world-clocks primary-city-control world-map"${showWorldClock ? ' checked' : ''}>世界時計を表示</label><div id="primary-city-control" class="primary-city-control"><label for="primary-city">メインの都市</label><select id="primary-city">${cityOptions(primaryCity)}</select></div><p id="date" class="date"></p><div id="digits" class="digits" role="timer" aria-label="現在時刻"></div><p id="caption" class="caption"></p><div id="progress" class="progress" hidden><div></div></div></section>
 <section id="world-clocks" class="world-clocks" aria-labelledby="world-title"><div class="world-heading"><h2 id="world-title">世界時計 <span>WORLD CLOCK</span></h2><p>都市を選んで、世界の今を。</p></div><div class="city-grid">${worldCities.map((timeZone, i) => `<article class="city-card"><label for="city-${i}">都市 ${i + 1}</label><select id="city-${i}" data-city="${i}">${cityOptions(timeZone)}</select><p id="city-time-${i}" class="city-time"></p><div class="city-detail"><span id="city-date-${i}"></span><span id="city-offset-${i}"></span></div></article>`).join('')}</div></section>
 <section id="timer-controls" class="controls" hidden><div class="presets"><button data-minutes="5">5分</button><button data-minutes="15">15分</button><button data-minutes="25" class="active">25分</button><button data-minutes="60">60分</button></div><form id="custom"><label>分 <input id="minutes" type="number" min="0" max="999" value="25" required></label><label>秒 <input id="seconds" type="number" min="0" max="59" value="0" required></label><button type="submit">設定</button></form><div class="actions"><button id="timer-reset">リセット</button><button id="timer-toggle" class="primary">スタート</button></div></section>
 <section id="stopwatch-controls" class="controls" hidden><div class="actions"><button id="stopwatch-reset">リセット</button><button id="stopwatch-toggle" class="primary">スタート</button><button id="lap" disabled>ラップ</button></div><ol id="laps" aria-label="ラップ記録"></ol><div id="lap-pages" class="lap-pages" hidden><button id="laps-newer" aria-label="新しいラップへ">← 新しい</button><span id="lap-page" role="status"></span><button id="laps-older" aria-label="古いラップへ">古い →</button></div></section>
@@ -95,6 +97,11 @@ document.querySelectorAll<HTMLButtonElement>('[data-setting]').forEach(button =>
   for (const name of ['notification', 'sound', 'source']) $(`setting-${name}`).hidden = selected !== name;
   document.querySelectorAll<HTMLButtonElement>('[data-setting]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
 });
+$('world-clock-toggle').onchange = () => {
+  showWorldClock = $<HTMLInputElement>('world-clock-toggle').checked;
+  saveCities();
+  select(mode);
+};
 $('primary-city').onchange = () => {
   const value = $<HTMLSelectElement>('primary-city').value;
   if (validCity(value)) { primaryCity = value; saveCities(); render(); }
@@ -245,12 +252,13 @@ function render() {
   if (mode === 'settings') { document.title = 'TEMPO — 設定'; return; }
   let display: string;
   if (mode === 'clock') {
-    const current = cityTime(primaryCity, now);
+    const timeZone = showWorldClock ? primaryCity : zone;
+    const current = cityTime(timeZone, now);
     display = current.time;
     $('date').textContent = current.date;
-    $('caption').textContent = `${cities.find(city => city[1] === primaryCity)![0]} · ${current.offset}${primaryCity === 'Asia/Tokyo' ? ' / JST' : ''}`;
-    $('zone').textContent = primaryCity;
-    worldCities.forEach((timeZone, i) => {
+    $('caption').textContent = `${showWorldClock ? cities.find(city => city[1] === primaryCity)![0] : 'ローカル時刻'} · ${current.offset}${timeZone === 'Asia/Tokyo' ? ' / JST' : ''}`;
+    $('zone').textContent = timeZone;
+    if (showWorldClock) worldCities.forEach((timeZone, i) => {
       const current = cityTime(timeZone, now);
       $(`city-time-${i}`).textContent = current.time;
       $(`city-date-${i}`).textContent = current.date;
@@ -276,11 +284,15 @@ let tick: number;
 function schedule() { clearTimeout(tick); render(); tick = window.setTimeout(schedule, document.hidden ? 1000 : mode === 'stopwatch' && started !== null ? 33 : 1000 - Date.now() % 1000); }
 function select(next: Mode) {
   mode = next;
-  $('app').classList.toggle('clock-view', mode === 'clock');
-  $('world-map').hidden = mode !== 'clock';
-  $('world-clocks').hidden = mode !== 'clock';
-  $('primary-city-control').hidden = mode !== 'clock';
-  $('time-label').innerHTML = `<i></i> ${mode === 'clock' ? 'WORLD TIME' : 'LOCAL TIME'}`;
+  const worldVisible = mode === 'clock' && showWorldClock;
+  $('app').classList.toggle('clock-view', worldVisible);
+  $('app').classList.toggle('local-clock-view', mode === 'clock' && !showWorldClock);
+  $('world-clock-control').hidden = mode !== 'clock';
+  $<HTMLInputElement>('world-clock-toggle').checked = showWorldClock;
+  $('world-map').hidden = !worldVisible;
+  $('world-clocks').hidden = !worldVisible;
+  $('primary-city-control').hidden = !worldVisible;
+  $('time-label').innerHTML = `<i></i> ${worldVisible ? 'WORLD TIME' : 'LOCAL TIME'}`;
   if (mode !== 'clock') $('zone').textContent = zone;
   $('stage').hidden = mode === 'settings';
   $('settings').hidden = mode !== 'settings';
