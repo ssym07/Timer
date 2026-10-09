@@ -48,10 +48,11 @@ nav .selected, .actions .primary, .settings-tabs [aria-pressed=true] { backgroun
 .stage { text-align: center; flex: 1 0 auto; min-height: min-content; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 4px 0; }
 .eyebrow { font-size: 13px; letter-spacing: 3px; color: var(--muted); margin: 0 0 clamp(6px, 2dvh, 20px); }
 .date { font-size: 20px; letter-spacing: 2px; color: #ccc; margin: 0 0 8px; }
+.local-clock-view .date, .clock-view .date { font-size: clamp(28px, 3.5vw, 40px); }
 .digits { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-variant-numeric: tabular-nums; font-weight: 400; letter-spacing: -.065em; font-size: clamp(40px, min(13vw, 20dvh), 164px); line-height: 1.1; color: #f5f5f5; white-space: nowrap; text-shadow: 0 2px 35px #000; padding-right: .065em; }
 .local-clock-view .digits { font-size: clamp(40px, min(19vw, 26dvh), 230px); }
 .clock-view .digits { font-size: clamp(40px, min(13vw, 17dvh), 180px); }
-.digits.stopwatch { font-size: clamp(30px, min(10vw, 17dvh), 125px); }
+.digits.stopwatch { font-size: clamp(30px, min(15vw, 26dvh), 195px); }
 .caption { font-size: 15px; letter-spacing: 2px; color: #aaa; margin: 10px 0 0; }
 .progress { height: 3px; width: min(470px, 85%); background: #333; margin: 16px auto 0; border-radius: 4px; overflow: hidden; flex-shrink: 0; }
 .progress div { height: 100%; background: #eee; }
@@ -173,7 +174,8 @@ footer { margin: 0 4%; display: flex; align-items: center; justify-content: spac
   .digits { font-size: min(7vw, 18dvh); }
   .clock-view .digits { font-size: min(8vw, 21dvh); }
   .local-clock-view .digits { font-size: min(19vw, 24dvh); }
-  .digits.stopwatch { font-size: min(5.5vw, 15dvh); }
+  .digits.stopwatch { font-size: min(6.5vw, 22dvh); }
+  .local-clock-view .date, .clock-view .date { font-size: clamp(24px, 3vw, 32px); }
   .eyebrow { font-size: 11px; letter-spacing: 1px; margin-bottom: 10px; }
   .date { font-size: 16px; letter-spacing: .5px; }
   .caption { font-size: 13px; letter-spacing: 1px; }
@@ -272,4 +274,76 @@ footer { margin: 0 4%; display: flex; align-items: center; justify-content: spac
   .world-clock-control { margin-bottom: 8px; }
   .city-card { padding-left: 7px; padding-right: 7px; }
   footer { gap: 6px; letter-spacing: 0; }
+}
+
+/* Give long tab names enough room without consuming the clock's height. */
+nav { display: grid; grid-template-columns: 1fr 1fr 1.65fr .85fr; width: min(100%, 720px); }
+nav button { min-width: 0; padding-inline: 8px; flex-wrap: nowrap; white-space: nowrap; gap: 5px; }
+@media (max-width: 640px) {
+  nav button { font-size: clamp(12px, 2.7vw, 16px); padding: 8px 2px; gap: 3px; }
+}
+
+/* In a small desktop window, use the full width for time rather than two columns. */
+@media (max-width: 1000px) and (max-height: 700px) {
+  #app { grid-template-rows: 40px minmax(0, 1fr) 24px; }
+  main { display: flex; flex-direction: column; padding: 8px 16px; gap: 8px; }
+  .stage { flex: 1 0 auto; padding: 0; }
+  .eyebrow { display: none; }
+  .digits, .local-clock-view .digits { font-size: min(19vw, 24dvh, 160px); line-height: 1; }
+  .digits.stopwatch { font-size: min(15vw, 22dvh, 135px); }
+  .clock-view .digits { font-size: min(18vw, 19dvh, 130px); }
+  .date { font-size: 17px; margin-bottom: 5px; letter-spacing: .5px; }
+  .local-clock-view .date, .clock-view .date { font-size: clamp(24px, 4vw, 34px); }
+  .caption { font-size: 14px; margin-top: 5px; letter-spacing: .5px; }
+  .progress { margin-top: 8px; }
+  .controls { align-self: stretch; }
+  .presets, .actions { gap: 8px; }
+  .presets button, .actions button { font-size: 17px; padding: 6px 16px; }
+  form { font-size: 17px; margin: 7px 0; gap: 12px; }
+  form input { font-size: 18px; padding: 5px 6px; width: 72px; }
+  form button { padding: 5px 16px; }
+  .world-clock-control { font-size: 16px; margin-bottom: 5px; }
+  .primary-city-control { margin-bottom: 5px; }
+  .primary-city-control select { font-size: 16px; padding: 4px 8px; }
+  .world-clocks { align-self: stretch; }
+  .city-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .city-card { padding: 6px 8px; }
+  .city-card select { font-size: 15px; padding: 3px 4px; }
+  .city-time { font-size: clamp(22px, 4.5vw, 32px); margin: 4px 0; }
+  .city-detail { font-size: 12px; }
+  .world-heading { margin-bottom: 5px; }
+  .world-heading h2 { font-size: 16px; }
+  #laps { margin-top: 6px; }
+  #laps li { font-size: 16px; padding: 4px 0; }
+  .lap-pages { gap: 12px; margin-top: 6px; font-size: 14px; }
+  .lap-pages button { font-size: 14px; padding: 4px 10px; }
+  .settings { flex-shrink: 0; padding: 12px 16px; }
+  .settings-heading { display: block; }
+  .settings h2 { font-size: 20px; }
+  .settings p, .settings .notification-note, .sound-picker p { font-size: 15px; line-height: 1.5; }
+  .settings-tabs { margin-top: 10px; }
+  .settings-tabs button { font-size: 16px; padding: 7px 8px; }
+  .setting-row { padding: 12px 0; gap: 12px; }
+  .setting-copy { flex-basis: 100%; }
+  .setting-copy h3 { font-size: 18px; }
+  .import-actions { flex-direction: row; flex-wrap: wrap; }
+  .import-actions button, .setting-row > button { font-size: 16px; }
+  footer { font-size: 11px; letter-spacing: 0; }
+}
+@media (max-width: 420px) and (max-height: 700px) {
+  main { padding-inline: 10px; }
+  .city-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .presets button, .actions button { padding-inline: 12px; }
+}
+
+#timer-controls { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.timer-details-control { display: flex; align-items: center; gap: 8px; font-size: 15px; color: #ccc; cursor: pointer; }
+.timer-details-control input { width: 17px; height: 17px; margin: 0; padding: 0; accent-color: #eee; }
+#custom { flex-wrap: wrap; gap: 8px 12px; margin: 0; }
+#custom label { display: flex; align-items: center; white-space: nowrap; }
+#custom input { width: 68px; }
+@media (max-width: 420px) {
+  #custom label { flex-direction: column; gap: 3px; }
+  #custom input { margin-left: 0; }
+  #custom button { align-self: flex-end; }
 }

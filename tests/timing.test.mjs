@@ -202,3 +202,35 @@ test('lap history keeps all records and pages without a scrolling list', () => {
   assert.equal(a.node('digits').textContent, a.run('cityTime(zone, new Date()).time'));
   assert.equal(a.run("JSON.parse(localStorage.getItem('tempo-world-clock')).showWorldClock"), false);
 });
+
+test('timer detail checkbox toggles fields and hours are included in duration', () => {
+  const a = app();
+  assert.match(a.node('app').innerHTML, /<form id="custom" hidden>/);
+  a.node('timer-details-toggle').checked = true;
+  a.node('timer-details-toggle').onchange();
+  assert.equal(a.node('custom').hidden, false);
+  a.node('hours').value = '2';
+  a.node('minutes').value = '3';
+  a.node('seconds').value = '4';
+  a.node('custom').onsubmit({ preventDefault() {} });
+  assert.equal(a.run('duration'), 7384000);
+  a.node('timer-details-toggle').checked = false;
+  a.node('timer-details-toggle').onchange();
+  assert.equal(a.node('custom').hidden, true);
+  assert.equal(a.run('duration'), 7384000);
+  a.run('setDuration(3600000)');
+  assert.equal(a.node('hours').value, '1');
+  assert.equal(a.node('minutes').value, '0');
+});
+
+test('long timers restore hours and reject invalid detailed inputs', () => {
+  const a = app({ duration: 359999000, remaining: 359999000, deadline: null });
+  assert.equal(a.node('hours').value, '99');
+  assert.equal(a.node('minutes').value, '59');
+  assert.equal(a.node('seconds').value, '59');
+  for (const values of [['100', '0', '0'], ['1', '60', '0'], ['0', '0', '0'], ['', '1', '0'], ['1.5', '0', '0']]) {
+    ['hours', 'minutes', 'seconds'].forEach((id, i) => a.node(id).value = values[i]);
+    a.node('custom').onsubmit({ preventDefault() {} });
+    assert.equal(a.run('duration'), 359999000);
+  }
+});

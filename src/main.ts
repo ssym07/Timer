@@ -78,7 +78,7 @@ $('app').innerHTML = `
 <div id="world-map" class="world-map" aria-hidden="true"></div><main><nav aria-label="表示切り替え"><button data-mode="clock" class="selected" aria-pressed="true">◷ <span>時計</span></button><button data-mode="timer" aria-pressed="false">◴ <span>タイマー</span></button><button data-mode="stopwatch" aria-pressed="false">⏱ <span>ストップウォッチ</span></button><button data-mode="settings" aria-pressed="false">⚙ <span>設定</span></button></nav>
 <section id="stage" class="stage" aria-label="時間表示"><p id="eyebrow" class="eyebrow">MAKE TIME FOR WHAT MATTERS</p><label id="world-clock-control" class="world-clock-control"><input id="world-clock-toggle" type="checkbox" aria-controls="world-clocks primary-city-control world-map"${showWorldClock ? ' checked' : ''}>世界時計を表示</label><div id="primary-city-control" class="primary-city-control"><label for="primary-city">メインの都市</label><select id="primary-city">${cityOptions(primaryCity)}</select></div><p id="date" class="date"></p><div id="digits" class="digits" role="timer" aria-label="現在時刻"></div><p id="caption" class="caption"></p><div id="progress" class="progress" hidden><div></div></div></section>
 <section id="world-clocks" class="world-clocks" aria-labelledby="world-title"><div class="world-heading"><h2 id="world-title">世界時計 <span>WORLD CLOCK</span></h2><p>都市を選んで、世界の今を。</p></div><div class="city-grid">${worldCities.map((timeZone, i) => `<article class="city-card"><label for="city-${i}">都市 ${i + 1}</label><select id="city-${i}" data-city="${i}">${cityOptions(timeZone)}</select><p id="city-time-${i}" class="city-time"></p><div class="city-detail"><span id="city-date-${i}"></span><span id="city-offset-${i}"></span></div></article>`).join('')}</div></section>
-<section id="timer-controls" class="controls" hidden><div class="presets"><button data-minutes="5">5分</button><button data-minutes="15">15分</button><button data-minutes="25" class="active">25分</button><button data-minutes="60">60分</button></div><form id="custom"><label>分 <input id="minutes" type="number" min="0" max="999" value="25" required></label><label>秒 <input id="seconds" type="number" min="0" max="59" value="0" required></label><button type="submit">設定</button></form><div class="actions"><button id="timer-reset">リセット</button><button id="timer-toggle" class="primary">スタート</button></div></section>
+<section id="timer-controls" class="controls" hidden><div class="presets"><button data-minutes="5">5分</button><button data-minutes="15">15分</button><button data-minutes="25" class="active">25分</button><button data-minutes="60">60分</button></div><label class="timer-details-control"><input id="timer-details-toggle" type="checkbox" aria-controls="custom">詳細設定</label><form id="custom" hidden><label>時間 <input id="hours" type="number" min="0" max="99" value="0" required></label><label>分 <input id="minutes" type="number" min="0" max="59" value="25" required></label><label>秒 <input id="seconds" type="number" min="0" max="59" value="0" required></label><button type="submit">設定</button></form><div class="actions"><button id="timer-reset">リセット</button><button id="timer-toggle" class="primary">スタート</button></div></section>
 <section id="stopwatch-controls" class="controls" hidden><div class="actions"><button id="stopwatch-reset">リセット</button><button id="stopwatch-toggle" class="primary">スタート</button><button id="lap" disabled>ラップ</button></div><ol id="laps" aria-label="ラップ記録"></ol><div id="lap-pages" class="lap-pages" hidden><button id="laps-newer" aria-label="新しいラップへ">← 新しい</button><span id="lap-page" role="status"></span><button id="laps-older" aria-label="古いラップへ">古い →</button></div></section>
 <div id="message" role="status" class="message"></div>
 <div id="alarm-banner" class="alarm-banner" role="alert" hidden><strong>タイマーが終了しました</strong><button id="alarm-dismiss">確認・音を止める</button></div>
@@ -120,7 +120,7 @@ function persist() {
 }
 try {
   const saved = JSON.parse(localStorage.getItem('tempo-timer') || 'null');
-  if (saved && Number.isFinite(saved.duration) && saved.duration > 0 && saved.duration <= 60_000_000 && Number.isFinite(saved.remaining) && saved.remaining >= 0 && (saved.deadline === null || Number.isFinite(saved.deadline))) {
+  if (saved && Number.isFinite(saved.duration) && saved.duration > 0 && saved.duration <= 359_999_000 && Number.isFinite(saved.remaining) && saved.remaining >= 0 && (saved.deadline === null || Number.isFinite(saved.deadline))) {
     ({ duration, remaining, deadline } = saved);
   }
 } catch { /* Ignore invalid saved state. */ }
@@ -307,12 +307,28 @@ document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button => bu
 function setDuration(ms: number) {
   if (deadline !== null) { message('時間を変更するには、タイマーを一時停止してください。'); return; }
   duration = remaining = ms; persist(); message('');
-  ($('minutes') as HTMLInputElement).value = String(Math.floor(ms / 60000));
-  ($('seconds') as HTMLInputElement).value = String(ms / 1000 % 60);
+  updateDurationInputs(ms);
   document.querySelectorAll<HTMLButtonElement>('[data-minutes]').forEach(b => b.classList.toggle('active', Number(b.dataset.minutes) * 60000 === ms)); render();
 }
 document.querySelectorAll<HTMLButtonElement>('[data-minutes]').forEach(b => b.onclick = () => setDuration(Number(b.dataset.minutes) * 60000));
-$('custom').onsubmit = event => { event.preventDefault(); const min = Number(($('minutes') as HTMLInputElement).value); const sec = Number(($('seconds') as HTMLInputElement).value); if (Number.isInteger(min) && Number.isInteger(sec) && min >= 0 && min <= 999 && sec >= 0 && sec <= 59 && min + sec > 0) setDuration((min * 60 + sec) * 1000); else message('1秒以上の時間を入力してください。'); };
+$('timer-details-toggle').onchange = () => {
+  $('custom').hidden = !$<HTMLInputElement>('timer-details-toggle').checked;
+};
+function updateDurationInputs(ms: number) {
+  $<HTMLInputElement>('hours').value = String(Math.floor(ms / 3_600_000));
+  $<HTMLInputElement>('minutes').value = String(Math.floor(ms / 60_000) % 60);
+  $<HTMLInputElement>('seconds').value = String(Math.floor(ms / 1000) % 60);
+}
+$('custom').onsubmit = event => {
+  event.preventDefault();
+  const values = ['hours', 'minutes', 'seconds'].map(id => $<HTMLInputElement>(id).value);
+  const [hours, minutes, seconds] = values.map(Number);
+  if (values.every(value => value.trim() !== '') && [hours, minutes, seconds].every(Number.isInteger)
+      && hours >= 0 && hours <= 99 && minutes >= 0 && minutes <= 59 && seconds >= 0 && seconds <= 59
+      && hours + minutes + seconds > 0) {
+    setDuration((hours * 3600 + minutes * 60 + seconds) * 1000);
+  } else message('時間は0〜99、分・秒は0〜59で、合計1秒以上を入力してください。');
+};
 $('timer-toggle').onclick = () => {
   render();
   stopAlarm(); $('alarm-banner').hidden = true;
@@ -366,8 +382,7 @@ $('fullscreen').onclick = async () => { try { if (document.fullscreenElement) aw
 window.addEventListener?.('focus', notificationStatus);
 document.addEventListener('visibilitychange', () => { notificationStatus(); schedule(); });
 if ('serviceWorker' in navigator && window.isSecureContext) notificationReady = navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).then(async () => { registration = await navigator.serviceWorker.ready; }).catch(() => {});
-($('minutes') as HTMLInputElement).value = String(Math.floor(duration / 60000));
-($('seconds') as HTMLInputElement).value = String(duration / 1000 % 60);
+updateDurationInputs(duration);
 document.querySelectorAll<HTMLButtonElement>('[data-minutes]').forEach(b => b.classList.toggle('active', Number(b.dataset.minutes) * 60000 === duration));
 notificationStatus(); select(deadline !== null ? 'timer' : 'clock');
 
